@@ -95,11 +95,10 @@ async def play(ctx: SlashContext, *, url):
         return
 
     n_queued = await player.queue_url(url)
+    await ctx.send(content='{} songs queued'.format(n_queued))
 
     if not player.is_playing():
         await player.play()
-
-    return await ctx.send(content='{} songs queued'.format(n_queued))
 
 @slash.subcommand(
     base='queue',
