@@ -141,7 +141,10 @@ class PlayerInstance():
         if song is None:
             return False
         url = await song.get_audio_url()
-        source = await discord.FFmpegOpusAudio.from_probe(url)
+        source = await discord.FFmpegOpusAudio.from_probe(
+            url,
+            before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+        )
 
         if self.voice_client.is_playing():
             self.voice_client.stop()
