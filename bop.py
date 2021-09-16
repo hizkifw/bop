@@ -1,15 +1,17 @@
 import os
 import discord
 import datetime
+import json
 from music import Song, Playlist, PlayerInstance
 from discord_slash import SlashCommand, SlashContext
 
 client = discord.Client(intents=discord.Intents.default())
 slash = SlashCommand(client, sync_commands=True)
-guild_ids = [730136766748819609]
+guild_ids = json.loads(os.environ.get('GUILD_IDS'))
 players: dict[int, PlayerInstance] = {}
 
 ERR_NOT_IN_VC = 'You must be in a voice channel to use this command.'
+ERR_NO_PLAYER = 'Nothing is playing.'
 ERR_UNKNOWN = 'An unknown error has occurred.'
 
 @client.event
@@ -21,8 +23,11 @@ async def connect_vc(ctx: SlashContext):
     if voice_channel is None:
         return False
 
-    voice_client = await voice_channel.connect()
-    players[voice_channel.id] = PlayerInstance(voice_client)
+    if ctx.voice_client is not None and ctx.voice_client.is_connected():
+        await ctx.voice_client.move_to(voice_channel)
+    else:
+        voice_client = await voice_channel.connect()
+        players[voice_channel.id] = PlayerInstance(voice_client)
     return True
 
 def get_player(ctx: SlashContext):
@@ -33,6 +38,20 @@ def get_player(ctx: SlashContext):
     if vc_id in players:
         return players[vc_id]
     return None
+
+async def embed_now_playing(player):
+    np = player.playlist.now_playing()
+    if np is None:
+        return discord.Embed(
+            description=ERR_NO_PLAYER
+        )
+
+    embed = discord.Embed(
+        title=await np.get_title(),
+        url=np.url,
+    )
+    embed.set_author(name='Now playing')
+    return embed
 
 async def get_player_or_connect(ctx: SlashContext, *, reply=False):
     player = get_player(ctx)
@@ -83,22 +102,29 @@ async def leave(ctx: SlashContext):
             'name': 'url',
             'description': 'YouTube video or playlist URL. Search coming soon.',
             'type': 3, # string
-            'required': True
+            'required': False
         }
     ],
     guild_ids=guild_ids
 )
-async def play(ctx: SlashContext, *, url):
+async def play(ctx: SlashContext, etc=None, *, url=None):
     await ctx.defer()
     player = await get_player_or_connect(ctx, reply=True)
     if player is None:
         return
 
-    n_queued = await player.queue_url(url)
-    await ctx.send(content='{} songs queued'.format(n_queued))
+    if url is not None:
+        n_queued = await player.queue_url(url)
+        await ctx.send(
+            content='{} songs queued'.format(n_queued),
+            embed=await embed_now_playing(player)
+        )
 
     if not player.is_playing():
         await player.play()
+
+    if not ctx.responded:
+        await ctx.send(embed=await embed_now_playing(player))
 
 @slash.subcommand(
     base='queue',
@@ -109,7 +135,7 @@ async def play(ctx: SlashContext, *, url):
 async def queue_list(ctx: SlashContext):
     player = get_player(ctx)
     if player is None:
-        return ctx.send(content='Nothing is playing')
+        return await ctx.send(content=ERR_NO_PLAYER)
 
     await ctx.defer()
     current_index = player.playlist.get_index()
@@ -131,9 +157,11 @@ async def queue_list(ctx: SlashContext):
             duration = duration[2:]
 
         if idx == partial_index:
-            message += '__Now Playing:__\n'
-
-        message += f'{display_idx}. [{title}]({url}) | {duration}\n'
+            message += '__Now playing:__\n**'
+        message += f'{display_idx}. [{title}]({url}) | {duration}'
+        if idx == partial_index:
+            message += '**'
+        message += '\n'
 
     embed = discord.Embed(
         title='Queue',
@@ -151,7 +179,7 @@ async def queue_list(ctx: SlashContext):
 async def queue_clear(ctx: SlashContext):
     player = get_player(ctx)
     if player is None:
-        return ctx.send(content='Nothing is playing')
+        return await ctx.send(content=ERR_NO_PLAYER)
 
     await player.stop()
     player.playlist.clear()
@@ -167,7 +195,7 @@ async def queue_clear(ctx: SlashContext):
 async def queue_shuffle(ctx: SlashContext):
     player = get_player(ctx)
     if player is None:
-        return ctx.send(content='Nothing is playing')
+        return await ctx.send(content=ERR_NO_PLAYER)
 
     player.playlist.shuffle()
     await ctx.send(content='Queue shuffled!')
@@ -184,18 +212,24 @@ async def skip(ctx: SlashContext):
         return
 
     if await player.play_next():
-        np = player.playlist.now_playing()
-        if np is None:
-            return await ctx.send(content='Skipped')
-
-        embed = discord.Embed(
-            title=await np.get_title(),
-            url=np.url,
-        )
-        embed.set_author(name='Now playing')
-        await ctx.send(embed=embed)
+        await ctx.send(embed=await embed_now_playing(player))
     else:
         await ctx.send(content='End of queue')
+
+@slash.slash(
+    name='pause',
+    description='Pause the current song',
+    guild_ids=guild_ids
+)
+async def pause(ctx: SlashContext):
+    player = get_player(ctx)
+    if player is None:
+        return await ctx.send(content=ERR_NO_PLAYER)
+
+    if player.is_playing():
+        await player.pause()
+
+    await ctx.send(content='Paused')
 
 print('Starting bot')
 client.run(os.environ.get('BOT_TOKEN'))
