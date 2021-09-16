@@ -1,5 +1,6 @@
 import os
 import discord
+import datetime
 from music import Song, Playlist, PlayerInstance
 from discord_slash import SlashCommand, SlashContext
 
@@ -100,15 +101,13 @@ async def play(ctx: SlashContext, *, url):
 
     return await ctx.send(content='{} songs queued'.format(n_queued))
 
-@slash.slash(
-    name='queue',
-    description='Song queue',
-    options=[
-
-    ],
+@slash.subcommand(
+    base='queue',
+    name='list',
+    description='Show the current queue',
     guild_ids=guild_ids
 )
-async def queue(ctx: SlashContext):
+async def queue_list(ctx: SlashContext):
     player = get_player(ctx)
     if player is None:
         return ctx.send(content='Nothing is playing')
@@ -117,7 +116,8 @@ async def queue(ctx: SlashContext):
     current_index = player.playlist.get_index()
     slice_start = max(0, current_index - 1)
     slice_end = current_index + 5
-    partial_list = player.playlist.get_list()[slice_start:slice_end]
+    full_list = player.playlist.get_list()
+    partial_list = full_list[slice_start:slice_end]
     partial_index = current_index - slice_start
 
     message = ''
@@ -125,7 +125,11 @@ async def queue(ctx: SlashContext):
         display_idx = slice_start + idx + 1
         title = await song.get_title()
         url = song.url
-        duration = await song.get_duration()
+        duration = str(datetime.timedelta(seconds=await song.get_duration()))
+
+        # Trim hour if 0
+        if duration.startswith('0:'):
+            duration = duration[2:]
 
         if idx == partial_index:
             message += '__Now Playing:__\n'
@@ -136,7 +140,38 @@ async def queue(ctx: SlashContext):
         title='Queue',
         description=message,
     )
+    embed.set_footer(text='{} songs in queue'.format(len(full_list)))
     await ctx.send(embed=embed)
+
+@slash.subcommand(
+    base='queue',
+    name='clear',
+    description='Remove all songs from the current queue',
+    guild_ids=guild_ids
+)
+async def queue_clear(ctx: SlashContext):
+    player = get_player(ctx)
+    if player is None:
+        return ctx.send(content='Nothing is playing')
+
+    await player.stop()
+    player.playlist.clear()
+
+    await ctx.send(content='Queue cleared!')
+
+@slash.subcommand(
+    base='queue',
+    name='shuffle',
+    description='Shuffle the order of songs in the queue',
+    guild_ids=guild_ids
+)
+async def queue_shuffle(ctx: SlashContext):
+    player = get_player(ctx)
+    if player is None:
+        return ctx.send(content='Nothing is playing')
+
+    player.playlist.shuffle()
+    await ctx.send(content='Queue shuffled!')
 
 @slash.slash(
     name='skip',
@@ -150,7 +185,16 @@ async def skip(ctx: SlashContext):
         return
 
     if await player.play_next():
-        await ctx.send(content='Skipped')
+        np = player.playlist.now_playing()
+        if np is None:
+            return await ctx.send(content='Skipped')
+
+        embed = discord.Embed(
+            title=await np.get_title(),
+            url=np.url,
+        )
+        embed.set_author(name='Now playing')
+        await ctx.send(embed=embed)
     else:
         await ctx.send(content='End of queue')
 

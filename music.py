@@ -1,16 +1,20 @@
 import asyncio
 import discord
+import random
 import time
 from yt_dlp import YoutubeDL
 
 async def extract_info(url):
     def _extract(_url):
-        opts = {
-            'extract_flat': True,
-            'skip_download': True,
-        }
-        with YoutubeDL(opts) as ydl:
-            return ydl.extract_info(_url, download=False, process=False)
+        try:
+            opts = {
+                'extract_flat': True,
+                'skip_download': True,
+            }
+            with YoutubeDL(opts) as ydl:
+                return ydl.extract_info(_url, download=False, process=False)
+        except:
+            return None
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _extract, url)
@@ -20,41 +24,61 @@ class Song():
         self.url = url
         self.info = None
         self.info_expiry = 0
+        self.is_valid = True
 
     async def get_info(self):
         if self.info is None or time.time() > self.info_expiry:
             self.info = await extract_info(self.url)
             self.info_expiry = time.time() + (3 * 60 * 60)
+
+            if self.info is None:
+                self.is_valid = False
         return self.info
 
     async def get_title(self):
-        await self.get_info()
-        return self.info['title']
+        if await self.get_info() is not None:
+            return self.info['title']
+        return '(error)'
 
     async def get_audio_url(self):
-        await self.get_info()
-        for fmt in self.info['formats']:
-            if fmt['format_id'] == '251':
-                return fmt['url']
+        if await self.get_info() is not None:
+            for fmt in self.info['formats']:
+                if fmt['format_id'] == '251':
+                    return fmt['url']
         return None
 
     async def get_duration(self):
-        await self.get_info()
-        return self.info['duration']
+        if await self.get_info() is not None:
+            return self.info['duration']
+        return 0
 
 class Playlist():
     song_list = []
     current_index = 0
 
-    def queue(self, song):
+    def _remove_invalids(self):
+        [self.song_list for x in self.song_list if x.is_valid == True]
+
+    def insert(self, song):
         self.song_list.append(song)
 
+    def clear(self):
+        self.song_list.clear()
+
+    def shuffle(self):
+        current_song = self.song_list.pop(self.current_index)
+        random.shuffle(self.song_list)
+        self.song_list.insert(0, current_song)
+        self.current_index = 0
+
     def now_playing(self):
+        self._remove_invalids()
         if self.current_index >= len(self.song_list) or self.current_index < 0:
             return None
         return self.song_list[self.current_index]
 
     def get_list(self):
+        self._remove_invalids()
         return self.song_list
 
     def get_index(self):
@@ -87,7 +111,7 @@ class PlayerInstance():
         if 'youtu.be' in url or '/watch?v=' in url:
             # Force youtube-dl to extract video instead of playlist
             url = url.replace('&list=', '&_list=')
-            self.playlist.queue(Song(url))
+            self.playlist.insert(Song(url))
             return 1
         elif 'youtube.com/playlist' in url:
             # Fetch playlist
@@ -95,7 +119,7 @@ class PlayerInstance():
             n = 0
             for entry in info['entries']:
                 song = Song('https://youtu.be/{}'.format(entry['id']))
-                self.playlist.queue(song)
+                self.playlist.insert(song)
                 n += 1
             return n
 
@@ -136,3 +160,7 @@ class PlayerInstance():
     async def resume(self):
         self.voice_client.resume()
 
+    async def stop(self):
+        if self.voice_client.is_playing():
+            self.is_skipping = True
+            self.voice_client.stop()
