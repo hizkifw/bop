@@ -102,7 +102,7 @@ async def leave(ctx: SlashContext):
             'name': 'url',
             'description': 'YouTube video or playlist URL. Search coming soon.',
             'type': 3, # string
-            'required': False
+            'required': True
         }
     ],
     guild_ids=guild_ids
@@ -230,6 +230,21 @@ async def pause(ctx: SlashContext):
         await player.pause()
 
     await ctx.send(content='Paused')
+
+@slash.slash(
+    name='resume',
+    description='Resume playback',
+    guild_ids=guild_ids
+)
+async def resume(ctx: SlashContext):
+    player = get_player(ctx)
+    if player is None:
+        return await ctx.send(content=ERR_NO_PLAYER)
+
+    if not player.is_playing():
+        await player.resume()
+
+    await ctx.send(content=await embed_now_playing(player))
 
 print('Starting bot')
 client.run(os.environ.get('BOT_TOKEN'))
