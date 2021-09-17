@@ -53,8 +53,9 @@ class Song():
         return 0
 
 class Playlist():
-    song_list = []
-    current_index = 0
+    def __init__(self):
+        self.song_list = []
+        self.current_index = 0
 
     def _remove_invalids(self):
         [self.song_list for x in self.song_list if x.is_valid == True]
