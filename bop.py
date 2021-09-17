@@ -2,8 +2,10 @@ import os
 import discord
 import datetime
 import json
+import discord_slash.utils.manage_components as mc
 from music import Song, Playlist, PlayerInstance
-from discord_slash import SlashCommand, SlashContext
+from discord_slash import SlashCommand, SlashContext, ComponentContext
+from discord_slash.model import ButtonStyle
 
 client = discord.Client(intents=discord.Intents.default())
 slash = SlashCommand(client, sync_commands=True)
@@ -16,6 +18,7 @@ ERR_UNKNOWN = 'An unknown error has occurred.'
 
 @client.event
 async def on_ready():
+    print(f'Logged in as {client.user.name}#{client.user.discriminator}')
     print('Ready!')
 
 async def connect_vc(ctx: SlashContext):
@@ -53,6 +56,25 @@ async def embed_now_playing(player):
     embed.set_author(name='Now playing')
     return embed
 
+async def create_player_components():
+    action_row = mc.create_actionrow(
+        mc.create_button(
+            style=ButtonStyle.gray,
+            label="Prev",
+            emoji="⏪️",
+        ),
+        mc.create_button(
+            style=ButtonStyle.gray,
+            label="Play/Pause",
+            emoji="⏯️",
+        ),
+        mc.create_button(
+            style=ButtonStyle.gray,
+            label="Skip",
+            emoji="⏩️",
+        )
+    )
+
 async def get_player_or_connect(ctx: SlashContext, *, reply=False):
     player = get_player(ctx)
     if player is None:
@@ -66,6 +88,10 @@ async def get_player_or_connect(ctx: SlashContext, *, reply=False):
         await ctx.send(content=ERR_UNKNOWN)
 
     return player
+
+@slash.component_callback()
+async def handle_component(ctx: ComponentContext):
+    pass
 
 @slash.slash(
     name='join',
@@ -107,28 +133,33 @@ async def leave(ctx: SlashContext):
     ],
     guild_ids=guild_ids
 )
-async def play(ctx: SlashContext, etc=None, *, url=None):
+async def play(ctx: SlashContext, etc=None, *, url):
     await ctx.defer()
     player = await get_player_or_connect(ctx, reply=True)
     if player is None:
         return
 
-    if url is not None:
-        n_queued = await player.queue_url(url)
-        await ctx.send(
-            content='{} songs queued'.format(n_queued),
-            embed=await embed_now_playing(player)
-        )
+    queue_ended = not player.playlist.has_next()
 
-    if not player.is_playing():
-        await player.play()
+    n_queued = await player.queue_url(url)
+    await ctx.send(
+        content='{} songs queued'.format(n_queued)
+    )
 
-    if not ctx.responded:
-        await ctx.send(embed=await embed_now_playing(player))
+    # Don't disturb the player if it's already playing
+    if player.is_playing():
+        return
 
-@slash.subcommand(
-    base='queue',
-    name='list',
+    # If it isn't playing because it reached the end of the queue,
+    # play the song that was just added to the queue
+    if queue_ended:
+        return await player.play_next()
+
+    # Otherwise resume playback
+    await player.resume()
+
+@slash.slash(
+    name='queue',
     description='Show the current queue',
     guild_ids=guild_ids
 )
@@ -170,8 +201,7 @@ async def queue_list(ctx: SlashContext):
     embed.set_footer(text='{} songs in queue'.format(len(full_list)))
     await ctx.send(embed=embed)
 
-@slash.subcommand(
-    base='queue',
+@slash.slash(
     name='clear',
     description='Remove all songs from the current queue',
     guild_ids=guild_ids
@@ -186,8 +216,7 @@ async def queue_clear(ctx: SlashContext):
 
     await ctx.send(content='Queue cleared!')
 
-@slash.subcommand(
-    base='queue',
+@slash.slash(
     name='shuffle',
     description='Shuffle the order of songs in the queue',
     guild_ids=guild_ids
@@ -203,9 +232,17 @@ async def queue_shuffle(ctx: SlashContext):
 @slash.slash(
     name='skip',
     description='Skip current song',
+    options=[
+#        {
+#            'name': 'number',
+#            'description': 'How many songs to skip',
+#            'type': 4, # integer
+#            'required': False
+#        }
+    ],
     guild_ids=guild_ids
 )
-async def skip(ctx: SlashContext):
+async def skip(ctx: SlashContext, *, number=1):
     await ctx.defer()
     player = await get_player_or_connect(ctx, reply=True)
     if player is None:

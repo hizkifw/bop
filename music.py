@@ -65,6 +65,7 @@ class Playlist():
 
     def clear(self):
         self.song_list.clear()
+        self.current_index = 0
 
     def shuffle(self):
         current_song = self.song_list.pop(self.current_index)
@@ -157,6 +158,8 @@ class PlayerInstance():
                 return
             asyncio.run_coroutine_threadsafe(self.play_next(), loop)
         self.voice_client.play(source, after=handle_next)
+        await asyncio.sleep(1)
+        self.is_skipping = False
 
     async def pause(self):
         self.voice_client.pause()
