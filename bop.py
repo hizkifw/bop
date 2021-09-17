@@ -244,7 +244,7 @@ async def resume(ctx: SlashContext):
     if not player.is_playing():
         await player.resume()
 
-    await ctx.send(content=await embed_now_playing(player))
+    await ctx.send(embed=await embed_now_playing(player))
 
 print('Starting bot')
 client.run(os.environ.get('BOT_TOKEN'))
