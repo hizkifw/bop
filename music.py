@@ -2,6 +2,7 @@ import asyncio
 import discord
 import random
 import time
+import util
 from yt_dlp import YoutubeDL
 
 async def extract_info(url):
@@ -41,7 +42,7 @@ class Song():
             return self.info['title']
         return '(error)'
 
-    async def get_audio_url(self):
+    async def _get_audio_url(self):
         if await self.get_info() is not None:
             formats = self.info['formats']
             # Prefer opus
@@ -52,6 +53,19 @@ class Song():
             for fmt in formats:
                 if 'audio' in fmt['format_note'] or 'acodec' != 'none':
                     return fmt['url']
+        return None
+
+    async def get_audio_url(self):
+        for _ in range(3):
+            url = await self._get_audio_url()
+
+            # Check if URL is valid
+            if await util.is_url_ok(url):
+                return url
+            else:
+                # Force refetch info if URL isn't valid
+                self.info_expiry = 0
+
         return None
 
     async def get_duration(self):
