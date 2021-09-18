@@ -6,6 +6,7 @@ import util
 import ui
 from music import Song, Playlist, PlayerInstance
 from discord_slash import SlashCommand, SlashContext, ComponentContext
+from discord_slash.model import SlashCommandOptionType
 
 client = discord.Client(intents=discord.Intents.default())
 slash = SlashCommand(client, sync_commands=True)
@@ -90,7 +91,7 @@ async def leave(ctx: SlashContext):
         {
             'name': 'query',
             'description': 'YouTube video or playlist URL, search query, or queue number',
-            'type': 3, # string
+            'type': SlashCommandOptionType.STRING,
             'required': True
         }
     ],
@@ -204,7 +205,7 @@ async def queue_shuffle(ctx: SlashContext):
         {
             'name': 'number',
             'description': 'How many songs to skip',
-            'type': 4, # integer
+            'type': SlashCommandOptionType.INTEGER,
             'required': False
         }
     ],
@@ -272,7 +273,7 @@ async def resume(ctx: SlashContext):
         {
             'name': 'mode',
             'description': 'Loop this song or the whole queue?',
-            'type': 3, # string
+            'type': SlashCommandOptionType.STRING,
             'required': True,
             'choices': [
                 { 'name': 'disable', 'value': PlayerInstance.LOOP_NONE },
@@ -298,7 +299,7 @@ async def loop(ctx: SlashContext, mode=PlayerInstance.LOOP_NONE):
         {
             'name': 'number',
             'description': 'The queue number of the song to remove',
-            'type': 4, # integer
+            'type': SlashCommandOptionType.INTEGER,
             'required': True
         }
     ],
