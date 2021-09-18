@@ -41,11 +41,10 @@ class Song():
         return None
 
     async def get_audio_url(self):
-        if not self.is_valid:
-            return None
-
         for _ in range(3):
             url = await self._get_audio_url()
+            if url is None:
+                return None
 
             # Check if URL is valid
             if await util.is_url_ok(url):
