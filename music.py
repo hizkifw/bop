@@ -56,6 +56,9 @@ class Song():
         return None
 
     async def get_audio_url(self):
+        if not self.is_valid:
+            return None
+
         for _ in range(3):
             url = await self._get_audio_url()
 
@@ -109,7 +112,7 @@ class Playlist():
 
     def jump(self, number, *, relative=True):
         new_index = number if not relative else self.current_index + number
-        new_index = min(new_index, len(self.song_list))
+        new_index = min(new_index, len(self.song_list) - 1)
         new_index = max(new_index, 0)
         self.current_index = new_index
         return self.now_playing()
