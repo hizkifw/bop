@@ -5,21 +5,6 @@ import time
 import util
 from yt_dlp import YoutubeDL
 
-async def extract_info(url):
-    def _extract(_url):
-        try:
-            opts = {
-                'extract_flat': True,
-                'skip_download': True,
-            }
-            with YoutubeDL(opts) as ydl:
-                return ydl.extract_info(_url, download=False, process=False)
-        except:
-            return None
-
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _extract, url)
-
 class Song():
     def __init__(self, url, requester_id=None):
         self.url = url
@@ -30,7 +15,7 @@ class Song():
 
     async def get_info(self):
         if self.info is None or time.time() > self.info_expiry:
-            self.info = await extract_info(self.url)
+            self.info = await util.youtube_extract_info(self.url)
             self.info_expiry = time.time() + (3 * 60 * 60)
 
             if self.info is None:
@@ -151,7 +136,7 @@ class PlayerInstance():
             queued_songs.append(song)
         elif 'youtube.com/playlist' in url:
             # Fetch playlist
-            info = await extract_info(url)
+            info = await util.youtube_extract_info(url)
             for entry in info['entries']:
                 song = Song('https://youtu.be/{}'.format(entry['id']), requester_id)
                 queued_songs.append(song)

@@ -2,6 +2,7 @@ import os
 import discord
 import datetime
 import json
+import util
 import ui
 from music import Song, Playlist, PlayerInstance
 from discord_slash import SlashCommand, SlashContext, ComponentContext
@@ -87,15 +88,15 @@ async def leave(ctx: SlashContext):
     description='Add a song to the queue',
     options=[
         {
-            'name': 'url',
-            'description': 'YouTube video or playlist URL. Search coming soon.',
+            'name': 'query',
+            'description': 'YouTube video or playlist URL, search query, or queue number',
             'type': 3, # string
             'required': True
         }
     ],
     guild_ids=guild_ids
 )
-async def play(ctx: SlashContext, etc=None, *, url):
+async def play(ctx: SlashContext, etc=None, *, query):
     await ctx.defer()
     player = await get_player_or_connect(ctx, reply=True)
     if player is None:
@@ -104,7 +105,27 @@ async def play(ctx: SlashContext, etc=None, *, url):
     requester_id = ctx.author_id
     queue_empty = len(player.playlist.get_list()) == 0
     queue_ended = not player.playlist.has_next()
-    songs = await player.queue_url(url, requester_id)
+
+    # If query is a number, jump to that playlist index
+    if query.isnumeric():
+        player.playlist.jump(int(query) - 1, relative=False)
+
+        if await player.play():
+            await ctx.send(embed=await ui.now_playing(player))
+        else:
+            await ctx.send(content='End of queue')
+        return
+
+    songs = []
+    if util.is_url(query):
+        # Query is a URL, queue it
+        songs = await player.queue_url(query, requester_id)
+    else:
+        # Search YouTube and get first result
+        search = await util.youtube_extract_info(f'ytsearch1:{query}')
+        results = list(search['entries'])
+        url = 'https://youtu.be/' + results[0]['id']
+        songs = await player.queue_url(url, requester_id)
 
     if len(songs) > 1:
         await ctx.send(
