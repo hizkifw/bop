@@ -291,6 +291,32 @@ async def loop(ctx: SlashContext, mode=PlayerInstance.LOOP_NONE):
     player.loop_mode = mode
     await ctx.send(content=f'Loop mode set to **{mode}**')
 
+@slash.slash(
+    name='remove',
+    description='Remove a song from the queue',
+    options=[
+        {
+            'name': 'number',
+            'description': 'The queue number of the song to remove',
+            'type': 4, # integer
+            'required': True
+        }
+    ],
+    guild_ids=guild_ids
+)
+async def remove_song(ctx: SlashContext, number: int):
+    player = get_player(ctx)
+    if player is None:
+        return await ctx.send(content=ui.ERR_NO_PLAYER)
+
+    song = player.playlist.remove(number - 1)
+    title = await song.get_title()
+    url = song.url
+    await ctx.send(content=f'Removed #{number} [{title}]({url})')
+
+    if number - 1 == player.playlist.get_index():
+        await player.play()
+
 print('Starting bot')
 client.run(os.environ.get('BOT_TOKEN'))
 

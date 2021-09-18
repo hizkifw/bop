@@ -18,8 +18,13 @@ class Song():
             self.info = await util.youtube_extract_info(self.url)
             self.info_expiry = time.time() + (3 * 60 * 60)
 
-            if self.info is None:
-                self.is_valid = False
+        if self.info is None or \
+                'duration' not in self.info or \
+                'formats' not in self.info or \
+                self.info['duration'] is None:
+            self.is_valid = False
+            return None
+
         return self.info
 
     async def get_title(self):
@@ -36,7 +41,7 @@ class Song():
                     return fmt['url']
             # Fall back to any audio otherwise
             for fmt in formats:
-                if 'audio' in fmt['format_note'] or 'acodec' != 'none':
+                if fmt['acodec'] != 'none':
                     return fmt['url']
         return None
 
@@ -100,6 +105,12 @@ class Playlist():
         new_index = max(new_index, 0)
         self.current_index = new_index
         return self.now_playing()
+
+    def remove(self, index):
+        if index < self.current_index:
+            self.current_index -= 1
+
+        return self.song_list.pop(index)
 
     def has_next(self):
         return self.current_index + 1 < len(self.song_list)
