@@ -244,6 +244,32 @@ async def resume(ctx: SlashContext):
 
     await ctx.send(embed=await ui.now_playing(player))
 
+@slash.slash(
+    name='loop',
+    description='Enable/disable looping',
+    options=[
+        {
+            'name': 'mode',
+            'description': 'Loop this song or the whole queue?',
+            'type': 3, # string
+            'required': True,
+            'choices': [
+                { 'name': 'disable', 'value': PlayerInstance.LOOP_NONE },
+                { 'name': 'song', 'value': PlayerInstance.LOOP_SONG },
+                { 'name': 'queue', 'value': PlayerInstance.LOOP_QUEUE }
+            ]
+        }
+    ],
+    guild_ids=guild_ids
+)
+async def loop(ctx: SlashContext, mode=PlayerInstance.LOOP_NONE):
+    player = get_player(ctx)
+    if player is None:
+        return await ctx.send(content=ui.ERR_NO_PLAYER)
+
+    player.loop_mode = mode
+    await ctx.send(content=f'Loop mode set to **{mode}**')
+
 print('Starting bot')
 client.run(os.environ.get('BOT_TOKEN'))
 

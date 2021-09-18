@@ -127,10 +127,15 @@ class Playlist():
         return self.jump(-1)
 
 class PlayerInstance():
+    LOOP_NONE = 'none'
+    LOOP_SONG = 'song'
+    LOOP_QUEUE = 'queue'
+
     def __init__(self, voice_client: discord.VoiceClient):
         self.voice_client = voice_client
         self.playlist = Playlist()
         self.skip_next_callback = False
+        self.loop_mode = self.LOOP_NONE
 
     async def queue_url(self, url, requester_id=None):
         queued_songs = []
@@ -157,9 +162,16 @@ class PlayerInstance():
         return self.voice_client.is_playing()
 
     async def play_next(self):
-        if not self.playlist.has_next():
+        if self.loop_mode == self.LOOP_SONG:
+            return await self.play()
+
+        if self.playlist.has_next():
+            self.playlist.go_next()
+        elif self.loop_mode == self.LOOP_QUEUE:
+            self.playlist.jump(0, relative=False)
+        else:
             return False
-        self.playlist.go_next()
+
         return await self.play()
 
     async def play(self):

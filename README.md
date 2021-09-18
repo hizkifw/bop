@@ -7,6 +7,7 @@ Discord music bot using discord.py, slash commands, and yt-dlp.
 - Play music from YouTube videos and playlists
 - Queue system with shuffle
 - Skip songs
+- Loop a song or the whole queue
 
 ## Running the bot
 
