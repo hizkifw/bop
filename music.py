@@ -20,11 +20,12 @@ async def extract_info(url):
     return await loop.run_in_executor(None, _extract, url)
 
 class Song():
-    def __init__(self, url):
+    def __init__(self, url, requester_id=None):
         self.url = url
         self.info = None
         self.info_expiry = 0
         self.is_valid = True
+        self.requester_id = requester_id
 
     async def get_info(self):
         if self.info is None or time.time() > self.info_expiry:
@@ -42,8 +43,14 @@ class Song():
 
     async def get_audio_url(self):
         if await self.get_info() is not None:
-            for fmt in self.info['formats']:
+            formats = self.info['formats']
+            # Prefer opus
+            for fmt in formats:
                 if fmt['format_id'] == '251':
+                    return fmt['url']
+            # Fall back to any audio otherwise
+            for fmt in formats:
+                if 'audio' in fmt['format_note'] or 'acodec' != 'none':
                     return fmt['url']
         return None
 
@@ -86,6 +93,13 @@ class Playlist():
     def get_index(self):
         return self.current_index
 
+    def jump(self, number, *, relative=True):
+        new_index = number if not relative else self.current_index + number
+        new_index = min(new_index, len(self.song_list))
+        new_index = max(new_index, 0)
+        self.current_index = new_index
+        return self.now_playing()
+
     def has_next(self):
         return self.current_index + 1 < len(self.song_list)
 
@@ -93,39 +107,37 @@ class Playlist():
         return self.current_index - 1 > 0
 
     def go_next(self):
-        if self.has_next():
-            self.current_index += 1
-        return self.now_playing()
+        return self.jump(1)
 
     def go_prev(self):
-        if self.has_prev():
-            self.current_index -= 1
-        return self.now_playing()
+        return self.jump(-1)
 
 class PlayerInstance():
     def __init__(self, voice_client: discord.VoiceClient):
         self.voice_client = voice_client
         self.playlist = Playlist()
-        self.is_skipping = False
+        self.skip_next_callback = False
 
-    async def queue_url(self, url):
+    async def queue_url(self, url, requester_id=None):
+        queued_songs = []
+
         # Check type of URL
         if 'youtu.be' in url or '/watch?v=' in url:
             # Force youtube-dl to extract video instead of playlist
             url = url.replace('&list=', '&_list=')
-            self.playlist.insert(Song(url))
-            return 1
+            song = Song(url, requester_id)
+            queued_songs.append(song)
         elif 'youtube.com/playlist' in url:
             # Fetch playlist
             info = await extract_info(url)
-            n = 0
             for entry in info['entries']:
-                song = Song('https://youtu.be/{}'.format(entry['id']))
-                self.playlist.insert(song)
-                n += 1
-            return n
+                song = Song('https://youtu.be/{}'.format(entry['id']), requester_id)
+                queued_songs.append(song)
 
-        return 0
+        for song in queued_songs:
+            self.playlist.insert(song)
+
+        return queued_songs
 
     def is_playing(self):
         return self.voice_client.is_playing()
@@ -134,32 +146,37 @@ class PlayerInstance():
         if not self.playlist.has_next():
             return False
         self.playlist.go_next()
-        self.is_skipping = True
-        await self.play()
-        return True
+        return await self.play()
 
     async def play(self):
         song = self.playlist.now_playing()
         if song is None:
             return False
+
         url = await song.get_audio_url()
+        if url is None:
+            return await self.play_next()
+
         source = await discord.FFmpegOpusAudio.from_probe(
             url,
             before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
         )
 
+        self.skip_next_callback = True
         if self.voice_client.is_playing():
             self.voice_client.stop()
 
         loop = asyncio.get_running_loop()
         def handle_next(error):
-            if self.is_skipping:
-                self.is_skipping = False
+            if self.skip_next_callback:
+                self.skip_next_callback = False
                 return
             asyncio.run_coroutine_threadsafe(self.play_next(), loop)
         self.voice_client.play(source, after=handle_next)
         await asyncio.sleep(1)
-        self.is_skipping = False
+        self.skip_next_callback = False
+
+        return True
 
     async def pause(self):
         self.voice_client.pause()
@@ -169,5 +186,5 @@ class PlayerInstance():
 
     async def stop(self):
         if self.voice_client.is_playing():
-            self.is_skipping = True
+            self.skip_next_callback = True
             self.voice_client.stop()
