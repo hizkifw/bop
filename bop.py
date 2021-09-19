@@ -104,7 +104,7 @@ async def play(ctx: SlashContext, etc=None, *, query):
         return
 
     requester_id = ctx.author_id
-    queue_empty = len(player.playlist.get_list()) == 0
+    queue_empty = len(player.playlist) == 0
     queue_ended = not player.playlist.has_next()
 
     # If query is a number, jump to that playlist index
@@ -314,6 +314,9 @@ async def remove_song(ctx: SlashContext, number: int):
     title = await song.get_title()
     url = song.url
     await ctx.send(content=f'Removed #{number} [{title}]({url})')
+
+    if len(player.playlist) == 0:
+        return await player.stop()
 
     if number - 1 == player.playlist.get_index():
         await player.play()

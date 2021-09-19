@@ -70,8 +70,8 @@ class Playlist():
         self.song_list = []
         self.current_index = 0
 
-    def _remove_invalids(self):
-        [self.song_list for x in self.song_list if x.is_valid == True]
+    def __len__(self):
+        return len(self.song_list)
 
     def insert(self, song):
         self.song_list.append(song)
@@ -87,13 +87,11 @@ class Playlist():
         self.current_index = 0
 
     def now_playing(self):
-        self._remove_invalids()
-        if self.current_index >= len(self.song_list) or self.current_index < 0:
+        if self.current_index >= len(self) or self.current_index < 0:
             return None
         return self.song_list[self.current_index]
 
     def get_list(self):
-        self._remove_invalids()
         return self.song_list
 
     def get_index(self):
@@ -101,7 +99,7 @@ class Playlist():
 
     def jump(self, number, *, relative=True):
         new_index = number if not relative else self.current_index + number
-        new_index = min(new_index, len(self.song_list) - 1)
+        new_index = min(new_index, len(self) - 1)
         new_index = max(new_index, 0)
         self.current_index = new_index
         return self.now_playing()
@@ -113,7 +111,7 @@ class Playlist():
         return self.song_list.pop(index)
 
     def has_next(self):
-        return self.current_index + 1 < len(self.song_list)
+        return self.current_index + 1 < len(self)
 
     def has_prev(self):
         return self.current_index - 1 > 0
