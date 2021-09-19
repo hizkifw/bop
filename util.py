@@ -4,9 +4,11 @@ from urllib.parse import urlparse
 from yt_dlp import YoutubeDL
 import concurrent.futures
 import asyncio
+import re
 
+pattern_url = re.compile(r'^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$')
 def is_url(url: str) -> bool:
-    return 'http://' in url or 'https://' in url
+    return pattern_url.match(url) is not None
 
 async def is_url_ok(url: str) -> int:
     def _request(_url: str):
