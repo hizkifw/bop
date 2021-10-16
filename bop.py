@@ -79,7 +79,7 @@ async def leave(ctx: SlashContext):
         await ctx.send(content=ui.ERR_NOT_IN_VC)
         return
 
-    await ctx.voice_client.disconnect()
+    await ctx.voice_client.disconnect(force=True)
     players[voice_channel.id] = None
 
     await ctx.send(content='Bye!')
